@@ -121,9 +121,6 @@
     const last = [...records].sort((a, b) => new Date(b.dateTime) - new Date(a.dateTime))[0];
     statLastCatEl.textContent = toCategory(last.systolic, last.diastolic).label;
   }
-
-
-
   function refreshUI() {
     renderList();
     calcStats();
