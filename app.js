@@ -122,48 +122,11 @@
     statLastCatEl.textContent = toCategory(last.systolic, last.diastolic).label;
   }
 
-  let chart;
-  function renderChart() {
-    const ctx = document.getElementById('bpChart');
-    if (!ctx) return;
-    const sorted = [...records].sort((a, b) => new Date(a.dateTime) - new Date(b.dateTime));
-    const labels = sorted.map((r) => new Date(r.dateTime).toLocaleDateString());
-    const systolic = sorted.map((r) => r.systolic);
-    const diastolic = sorted.map((r) => r.diastolic);
 
-    if (chart) {
-      chart.data.labels = labels;
-      chart.data.datasets[0].data = systolic;
-      chart.data.datasets[1].data = diastolic;
-      chart.update();
-      return;
-    }
-
-    chart = new window.Chart(ctx, {
-      type: 'line',
-      data: {
-        labels,
-        datasets: [
-          { label: '수축기', data: systolic, borderColor: '#60a5fa', backgroundColor: 'rgba(96,165,250,.2)', tension: 0.2 },
-          { label: '이완기', data: diastolic, borderColor: '#fca5a5', backgroundColor: 'rgba(252,165,165,.2)', tension: 0.2 },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          x: { ticks: { color: '#9aa4b2' }, grid: { color: 'rgba(148,163,184,.15)' } },
-          y: { ticks: { color: '#9aa4b2' }, grid: { color: 'rgba(148,163,184,.15)' } },
-        },
-        plugins: { legend: { labels: { color: '#e6eaf2' } } },
-      },
-    });
-  }
 
   function refreshUI() {
     renderList();
     calcStats();
-    renderChart();
   }
 
   function uuid() {
@@ -246,30 +209,57 @@
     refreshUI();
   }
 
-  function toCsv(rows) {
-    const header = ['id','dateTime','systolic','diastolic','pulse','note'];
-    const escape = (v) => {
-      if (v == null) return '';
-      const s = String(v).replaceAll('"', '""');
-      return '"' + s + '"';
-    };
-    const lines = [header.join(',')].concat(
-      rows.map((r) => header.map((h) => escape(r[h])).join(','))
-    );
-    return lines.join('\n');
+  function toExcelData(rows) {
+    // 헤더 행
+    const headers = ['날짜/시간', '수축기(mmHg)', '이완기(mmHg)', '맥박(bpm)', '범주', '메모'];
+    
+    // 데이터 행들
+    const dataRows = rows.map(r => {
+      const date = new Date(r.dateTime);
+      const { label } = toCategory(r.systolic, r.diastolic);
+      return [
+        date.toLocaleString('ko-KR'),
+        r.systolic,
+        r.diastolic,
+        r.pulse || '',
+        label,
+        r.note || ''
+      ];
+    });
+    
+    return [headers, ...dataRows];
   }
 
   function onExportCsv() {
-    const csv = toCsv(records);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `blood-pressure-${new Date().toISOString().slice(0,10)}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    if (!window.XLSX) {
+      alert('엑셀 라이브러리를 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+
+    const data = toExcelData(records);
+    
+    // 워크북 생성
+    const wb = XLSX.utils.book_new();
+    
+    // 워크시트 생성
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    
+    // 열 너비 설정
+    ws['!cols'] = [
+      { width: 20 }, // 날짜/시간
+      { width: 12 }, // 수축기
+      { width: 12 }, // 이완기
+      { width: 10 }, // 맥박
+      { width: 12 }, // 범주
+      { width: 30 }  // 메모
+    ];
+    
+    // 워크시트를 워크북에 추가
+    XLSX.utils.book_append_sheet(wb, ws, '혈압기록');
+    
+    // 파일 다운로드
+    const fileName = `혈압기록_${new Date().toLocaleDateString('ko-KR').replace(/\./g, '-')}.xlsx`;
+    XLSX.writeFile(wb, fileName);
   }
 
   // PWA install
